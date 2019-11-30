@@ -7,50 +7,260 @@ import (
 	"strconv"
 )
 
-func eval(s io.Reader) (string, error) {
-	buf := make([]byte, 1)
-	cell := 0
+// read RawInput byte by byte
+// add to Input
+// process instruction
+// advance insruction pointer
+// loops
+type Bf struct {
+	rawInput io.Reader
 
-	for {
-		c, err := s.Read(buf)
+	Input              []string
+	InstructionPointer int
 
-		fmt.Println("read: ", string(buf), c, err)
+	DataCells      *[30]int
+	DataPointer    int
+	maxDataPointer int
+}
 
-		if err != nil && err != io.EOF {
-			return "", err
-		}
+func (bf Bf) String() string {
+	return fmt.Sprintf("==============\nBF struct\nInput: %s\nInstructionPointer: %d\nDataCells: %v\nDataPointer: %d\n=============",
+		bf.Input, bf.InstructionPointer, bf.DataCells, bf.DataPointer)
+}
 
-		if err == io.EOF || c == 0 {
-			break
-		}
+func newBf(input io.Reader) Bf {
+	var dc [30]int
 
-		op := string(buf)
+	return Bf{
+		rawInput:           input,
+		Input:              []string{},
+		InstructionPointer: 0,
+		DataCells:          &dc,
+		DataPointer:        0,
+	}
+}
 
-		switch op {
-		// case '>':
-		// 	program = append(program, Instruction{op_inc_dp, 0})
-		// case '<':
-		// 	program = append(program, Instruction{op_dec_dp, 0})
-		case "+":
-			fmt.Println("DEBUG: adding 1 from ", cell)
-			cell += 1
-		case "-":
-			fmt.Println("DEBUG: substracting 1 from ", cell)
-			cell -= 1
-		case ".":
-			fmt.Printf("Output via '.': %d\n", cell)
-		}
+// eiter read from Reader and add it to Input, or return data from Input
+func (bf *Bf) ReadInstruction() (bool, string) {
+	// fmt.Printf("> trying to read %d @ %v", bf.InstructionPointer, bf.Input)
+
+	// if bf.InstructionPointer == len(bf.Input) {
+	if bf.InstructionPointer < len(bf.Input) {
+		// fmt.Println("DEBUG: Read from cached input")
+		return true, bf.Input[bf.InstructionPointer]
+	} else {
+		// fmt.Println("DEBUG: Can't ead from cached input")
 	}
 
-	return strconv.Itoa(cell), nil
+	// fmt.Println("DEBUG: Trying to read from Reader")
+
+	if ok, c := readNextChar(bf.rawInput); ok {
+		// fmt.Println("> read input byte: ", c)
+
+		bf.Input = append(bf.Input, c)
+		// fmt.Println("> enhanced input, now: ", bf.Input)
+	} else {
+		// fmt.Println("> no more reading from input: ", c)
+		return false, ""
+	}
+
+	if bf.InstructionPointer < 0 || bf.InstructionPointer > len(bf.Input) {
+		panic("undefined behavior: can't point behind known chars")
+	}
+
+	// fmt.Printf("> ReadInstruction: pos '%d': '%s', data: %d @ %d\n", bf.InstructionPointer, bf.Input[bf.InstructionPointer], bf.DataCells[bf.DataPointer], bf.DataPointer)
+
+	return true, bf.Input[bf.InstructionPointer]
+}
+
+func (bf *Bf) IncrementCurrentCell() {
+	if bf.DataCells[bf.DataPointer] >= 255 {
+		// fmt.Println("data cell value overflow:")
+		panic(bf)
+	}
+
+	bf.DataCells[bf.DataPointer] += 1
+
+	// fmt.Printf("Inc: %d @ %d\n", bf.DataCells[bf.DataPointer], bf.DataPointer)
+}
+
+func (bf *Bf) DecrementCurrentCell() {
+	if bf.DataCells[bf.DataPointer] < 0 {
+		// fmt.Println("Trying to decrement cell under zero!")
+		panic(bf)
+	}
+
+	bf.DataCells[bf.DataPointer] -= 1
+}
+
+func (bf *Bf) IncrementDataPointer() {
+	bf.DataPointer += 1
+
+	if bf.DataPointer > bf.maxDataPointer {
+		bf.maxDataPointer = bf.DataPointer
+	}
+}
+
+func (bf *Bf) DecrementDataPointer() {
+	if bf.DataPointer <= 0 {
+		// fmt.Println("Trying to decrement data pointer below zero!")
+		panic(bf)
+	}
+
+	bf.DataPointer -= 1
+}
+
+func (bf *Bf) AdvanceInstructionPointer() {
+	bf.InstructionPointer += 1
+}
+
+func (bf Bf) PrintCurrentCell() {
+	fmt.Printf("Output via '.': %d\n", bf.DataCells[bf.DataPointer])
+}
+
+func (bf *Bf) SkipLoop() {
+	bracketBalance := 0
+
+	for {
+		ok, ins := bf.ReadInstruction()
+
+		if !ok {
+			return
+		}
+
+		if ins == "[" {
+			bracketBalance += 1
+		}
+
+		if ins == "]" {
+			bracketBalance -= 1
+		}
+
+		bf.AdvanceInstructionPointer()
+
+		if bracketBalance == 0 {
+			return
+		}
+	}
+}
+
+func (bf *Bf) Run() {
+	for {
+		ok, ins := bf.ReadInstruction()
+
+		if !ok {
+			return
+		}
+
+		switch ins {
+		case "[":
+			bf.Loop()
+		case "]": // we're inside loop and it's the end of it
+			// fmt.Println("end of loop in inner, returning to parent")
+			// bf.AdvanceInstructionPointer()
+			return
+		case "+":
+			bf.IncrementCurrentCell()
+			bf.AdvanceInstructionPointer()
+		case "-":
+			bf.DecrementCurrentCell()
+			bf.AdvanceInstructionPointer()
+		case ">":
+			bf.IncrementDataPointer()
+			bf.AdvanceInstructionPointer()
+		case "<":
+			bf.DecrementDataPointer()
+			bf.AdvanceInstructionPointer()
+		case ".":
+			bf.PrintCurrentCell()
+			bf.AdvanceInstructionPointer()
+		default: // skip unknown commands
+			// fmt.Printf("> unknown instruction: '%s', skipping", ins)
+			bf.AdvanceInstructionPointer()
+		}
+	}
+}
+
+func (bf *Bf) Loop() {
+	startIdx := bf.InstructionPointer
+
+	// fmt.Println("> Starting 'Loop', startIdx: ", startIdx)
+
+	for {
+		ok, ins := bf.ReadInstruction()
+
+		if !ok {
+			return
+		}
+
+		if ins == "[" && bf.DataCells[bf.DataPointer] == 0 {
+			// fmt.Println("> skipping loop from beginning")
+			bf.SkipLoop()
+			// fmt.Println("> returning from SkipLoop() to parent Run()")
+			return
+		}
+
+		// fmt.Println(bf)
+
+		if ins == "]" && bf.DataCells[bf.DataPointer] == 0 {
+			// fmt.Println("> skipping loop end")
+			bf.AdvanceInstructionPointer()
+			return
+		}
+
+		if ins == "]" && bf.DataCells[bf.DataPointer] != 0 {
+			bf.InstructionPointer = startIdx
+			// fmt.Println("> ']' rewound loop to next position after: ", startIdx)
+		}
+
+		bf.AdvanceInstructionPointer()
+		// fmt.Println("> Evaluating inner data, doing 'bf.Run()' from bf.Loop()")
+		// fmt.Println(bf)
+		bf.Run()
+		// fmt.Printf("we're back in loop with starting index '%d'\n", startIdx)
+	}
+}
+
+func (bf Bf) IntString() string {
+	res := ""
+
+	for _, v := range bf.DataCells[:bf.maxDataPointer+1] {
+		res += strconv.Itoa(v)
+	}
+
+	return res
+}
+
+func (bf Bf) Ascii() string {
+	res := ""
+
+	for _, v := range bf.DataCells[:bf.maxDataPointer+1] {
+		res += fmt.Sprint(string(v))
+	}
+
+	return res
+}
+
+func readNextChar(r io.Reader) (bool, string) {
+	buf := make([]byte, 1)
+
+	c, err := r.Read(buf)
+
+	if err != nil && err != io.EOF {
+		return false, ""
+	}
+
+	if err == io.EOF || c == 0 {
+		return false, ""
+	}
+
+	return true, string(buf)
 }
 
 func main() {
-	// reader := bufio.NewReader(os.Stdin)
+	bf := newBf(bytes.NewBufferString("++.+>+[-.]"))
 
-	// read_val, _ := reader.ReadByte()
+	bf.Run()
 
-	got, err := eval(bytes.NewBufferString("++."))
-
-	fmt.Println("print eval: ", got, err)
+	// fmt.Println("print eval: ", bf.IntString())
 }
