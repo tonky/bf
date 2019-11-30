@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 )
 
@@ -115,7 +116,7 @@ func (bf *Bf) AdvanceInstructionPointer() {
 }
 
 func (bf Bf) PrintCurrentCell() {
-	fmt.Printf("Output via '.': %d\n", bf.DataCells[bf.DataPointer])
+	fmt.Printf("%s", string(bf.DataCells[bf.DataPointer]))
 }
 
 func (bf *Bf) SkipLoop() {
@@ -258,9 +259,37 @@ func readNextChar(r io.Reader) (bool, string) {
 }
 
 func main() {
-	bf := newBf(bytes.NewBufferString("++.+>+[-.]"))
+	args := os.Args[1:]
 
+	if len(args) != 1 {
+		fmt.Println("Please provide an argument in form of filename or code")
+		os.Exit(1)
+	}
+
+	// try checking if it's a file
+	fmt.Printf("Checking file existence: '%s'\n", args[0])
+
+	if _, err := os.Stat(args[0]); err == nil {
+		fmt.Println("Exists! Opening now...")
+
+		f, err := os.Open(args[0])
+
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("Running program from file...")
+
+		bf := newBf(f)
+		bf.Run()
+
+		return
+	} else {
+		fmt.Println("Can't find provided argument as file.")
+	}
+
+	fmt.Printf("Running program as a source string: '%s'\n", args[0])
+
+	bf := newBf(bytes.NewBufferString(args[0]))
 	bf.Run()
-
-	// fmt.Println("print eval: ", bf.IntString())
 }
