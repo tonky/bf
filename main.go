@@ -9,6 +9,7 @@ import (
 	"strconv"
 )
 
+// Bf hold all interpreter state and methods
 type Bf struct {
 	inputReader        *bufio.Reader
 	Input              []string // cached input
@@ -76,6 +77,7 @@ func (bf *Bf) Eval() {
 	}
 }
 
+// ReadAndAdvance reads current instruction and advances instruction pointer
 func (bf *Bf) ReadAndAdvance() (bool, string) {
 	ok, ins := bf.ReadInstruction()
 
@@ -84,25 +86,28 @@ func (bf *Bf) ReadAndAdvance() (bool, string) {
 	return ok, ins
 }
 
-// eiter read from Reader and add it to Input, or return data from Input
+// ReadInstruction tries to return an instruction at 'InstructionPointer' postion,
+// reading it from cahced Input if in bounds, or trying to read it from bufio.Reader
 func (bf *Bf) ReadInstruction() (bool, string) {
 	if bf.InstructionPointer < len(bf.Input) {
 		return true, bf.Input[bf.InstructionPointer]
-	}
-
-	if c, err := bf.inputReader.ReadByte(); err != nil {
-		return false, ""
-	} else {
-		bf.Input = append(bf.Input, string(c))
 	}
 
 	if bf.InstructionPointer < 0 || bf.InstructionPointer > len(bf.Input) {
 		panic("Instruction pointer advanced beyond known data")
 	}
 
+	// we don't have cached Input instruction,so let's try reading it from Reader
+	if c, err := bf.inputReader.ReadByte(); err != nil {
+		return false, ""
+	} else {
+		bf.Input = append(bf.Input, string(c))
+	}
+
 	return true, bf.Input[bf.InstructionPointer]
 }
 
+// IntString pritns DataCells content as human readable string representation
 func (bf Bf) IntString() string {
 	res := ""
 
@@ -113,6 +118,7 @@ func (bf Bf) IntString() string {
 	return res
 }
 
+// SkipToLoopEnd tries to advance to a matching "]" bracket in the input
 func (bf *Bf) SKipToLoopEnd() {
 	for matchingBracket := 1; matchingBracket > 0; bf.InstructionPointer++ {
 		ok, ins := bf.ReadInstruction()
@@ -131,6 +137,7 @@ func (bf *Bf) SKipToLoopEnd() {
 	}
 }
 
+// SkipToLoopEnd tries to backtrack to a matching "["
 func (bf *Bf) SkipBack() {
 	bf.InstructionPointer -= 2 // rewind to first instruction before "]"
 
