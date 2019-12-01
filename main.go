@@ -15,7 +15,7 @@ type Bf struct {
 	Input              []string // cached input
 	InstructionPointer int
 
-	DataCells      [30]int
+	DataCells      [30000]int
 	DataPointer    int
 	maxDataPointer int // pretty print helper to not pring while 'DataCells'
 }
@@ -25,7 +25,7 @@ func newBf(input io.Reader) Bf {
 		inputReader:        bufio.NewReader(input),
 		Input:              []string{},
 		InstructionPointer: 0,
-		DataCells:          [30]int{},
+		DataCells:          [30000]int{},
 		DataPointer:        0,
 	}
 }
