@@ -156,15 +156,6 @@ func (bf *Bf) SkipBack() {
 }
 
 func main() {
-	bfn := newBf(bytes.NewBufferString("++.+>[-.]"))
-	bfn2 := newBf(bytes.NewBufferString("[ empty [loop] inner ] >> ++"))
-
-	bfn.Eval()
-	bfn2.Eval()
-
-	fmt.Println("new eval: ", bfn.IntString())
-	fmt.Println("new eval2: ", bfn2.IntString())
-
 	args := os.Args[1:]
 
 	if len(args) != 1 {
