@@ -15,7 +15,7 @@ type Bf struct {
 	Input              []string // cached input
 	InstructionPointer int
 
-	DataCells      [30000]int
+	DataCells      [30]int
 	DataPointer    int
 	maxDataPointer int // pretty print helper to not pring while 'DataCells'
 }
@@ -25,12 +25,36 @@ func newBf(input io.Reader) Bf {
 		inputReader:        bufio.NewReader(input),
 		Input:              []string{},
 		InstructionPointer: 0,
-		DataCells:          [30000]int{},
+		DataCells:          [30]int{},
 		DataPointer:        0,
 	}
 }
 
-// Eval is the main interpreter - loop and evaluate while any instructions are returned
+// Loop is mutually recursive with 'Eval()', descending into in on each loop
+func (bf *Bf) Loop() {
+	startIdx := bf.InstructionPointer
+
+	for {
+		// Instruction is "[" - check if we need to skip this loop
+		if bf.DataCells[bf.DataPointer] == 0 {
+			bf.SKipToLoopEnd()
+			return
+		}
+
+		bf.Eval()
+
+		// Instruction is "]" - run loop again if data cell isn't 0
+		if bf.DataCells[bf.DataPointer] > 0 {
+			bf.InstructionPointer = startIdx
+		}
+
+		if bf.DataCells[bf.DataPointer] == 0 {
+			return
+		}
+	}
+}
+
+// Eval is the main interpreter - evaluate and recurse into any loop we find
 func (bf *Bf) Eval() {
 	for {
 		ok, instruction := bf.ReadAndAdvance()
@@ -58,13 +82,9 @@ func (bf *Bf) Eval() {
 				bf.DataCells[bf.DataPointer] = int(c)
 			}
 		case "[":
-			if bf.DataCells[bf.DataPointer] == 0 {
-				bf.SKipToLoopEnd()
-			}
-		case "]":
-			if bf.DataCells[bf.DataPointer] != 0 {
-				bf.SkipBack()
-			}
+			bf.Loop()
+		case "]": // found end of loop into inner 'Eval()', just return to parent 'Loop'
+			return
 		case "j": // custom operator to increment DataCell pointer twice
 			bf.DataPointer += 2
 		default:
@@ -94,6 +114,7 @@ func (bf *Bf) ReadInstruction() (bool, string) {
 	}
 
 	if bf.InstructionPointer < 0 || bf.InstructionPointer > len(bf.Input) {
+		fmt.Printf("IP: %d, Input: %d\n", bf.InstructionPointer, len(bf.Input))
 		panic("Instruction pointer advanced beyond known data")
 	}
 
@@ -133,31 +154,6 @@ func (bf *Bf) SKipToLoopEnd() {
 
 		if ins == "]" {
 			matchingBracket -= 1
-		}
-	}
-}
-
-// SkipToLoopEnd tries to backtrack to a matching "["
-func (bf *Bf) SkipBack() {
-	bf.InstructionPointer -= 2 // rewind to first instruction before "]"
-
-	for matchingBracket := 1; matchingBracket > 0; bf.InstructionPointer-- {
-		ok, ins := bf.ReadInstruction()
-
-		if !ok {
-			return
-		}
-
-		if ins == "[" {
-			matchingBracket -= 1
-		}
-
-		if ins == "]" {
-			matchingBracket += 1
-		}
-
-		if matchingBracket == 0 {
-			return
 		}
 	}
 }
