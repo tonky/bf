@@ -9,32 +9,79 @@ import (
 	"strconv"
 )
 
-// read RawInput byte by byte
-// add to Input
-// process instruction
-// advance insruction pointer
-// loops
 type Bf struct {
-	rawInput io.Reader
-
-	Input              []string
+	inputReader        *bufio.Reader
+	Input              []string // cached input
 	InstructionPointer int
 
-	DataCells      *[30]int
+	DataCells      [30000]int
 	DataPointer    int
-	maxDataPointer int
+	maxDataPointer int // pretty print helper to not pring while 'DataCells'
 }
 
 func newBf(input io.Reader) Bf {
-	var dc [30]int
-
 	return Bf{
-		rawInput:           input,
+		inputReader:        bufio.NewReader(input),
 		Input:              []string{},
 		InstructionPointer: 0,
-		DataCells:          &dc,
+		DataCells:          [30000]int{},
 		DataPointer:        0,
 	}
+}
+
+// Eval is the main interpreter - loop and evaluate while any instructions are returned
+func (bf *Bf) Eval() {
+	for {
+		ok, instruction := bf.ReadAndAdvance()
+
+		if !ok {
+			return
+		}
+
+		switch instruction {
+		case "+":
+			bf.DataCells[bf.DataPointer] += 1
+		case "-":
+			bf.DataCells[bf.DataPointer] -= 1
+		case "<":
+			bf.DataPointer -= 1
+		case ">":
+			bf.DataPointer += 1
+		case ".":
+			fmt.Printf("%s", string(bf.DataCells[bf.DataPointer]))
+		case ",":
+			fmt.Printf("> Input: ")
+			if c, err := bufio.NewReader(os.Stdin).ReadByte(); err != nil {
+				panic("can't read from stdin")
+			} else {
+				bf.DataCells[bf.DataPointer] = int(c)
+			}
+		case "[":
+			if bf.DataCells[bf.DataPointer] == 0 {
+				bf.SKipToLoopEnd()
+			}
+		case "]":
+			if bf.DataCells[bf.DataPointer] != 0 {
+				bf.SkipBack()
+			}
+		case "j": // custom operator to increment DataCell pointer twice
+			bf.DataPointer += 2
+		default:
+		}
+
+		// save the last toched data cell to limit displaying DataCells output
+		if bf.maxDataPointer < bf.DataPointer {
+			bf.maxDataPointer = bf.DataPointer
+		}
+	}
+}
+
+func (bf *Bf) ReadAndAdvance() (bool, string) {
+	ok, ins := bf.ReadInstruction()
+
+	bf.InstructionPointer += 1
+
+	return ok, ins
 }
 
 // eiter read from Reader and add it to Input, or return data from Input
@@ -43,14 +90,14 @@ func (bf *Bf) ReadInstruction() (bool, string) {
 		return true, bf.Input[bf.InstructionPointer]
 	}
 
-	if ok, c := readNextChar(bf.rawInput); ok {
-		bf.Input = append(bf.Input, c)
-	} else {
+	if c, err := bf.inputReader.ReadByte(); err != nil {
 		return false, ""
+	} else {
+		bf.Input = append(bf.Input, string(c))
 	}
 
 	if bf.InstructionPointer < 0 || bf.InstructionPointer > len(bf.Input) {
-		panic("Instruction pointer advanced behind known data")
+		panic("Instruction pointer advanced beyond known data")
 	}
 
 	return true, bf.Input[bf.InstructionPointer]
@@ -64,18 +111,6 @@ func (bf Bf) IntString() string {
 	}
 
 	return res
-}
-
-func (bf *Bf) ReadAndMaybeAdvance() (bool, string) {
-	ok, ins := bf.ReadInstruction()
-
-	if !ok {
-		return ok, ins
-	}
-
-	bf.InstructionPointer += 1
-
-	return ok, ins
 }
 
 func (bf *Bf) SKipToLoopEnd() {
@@ -118,66 +153,6 @@ func (bf *Bf) SkipBack() {
 			return
 		}
 	}
-}
-
-func (bf *Bf) Eval() {
-	for {
-		ok, ins := bf.ReadAndMaybeAdvance()
-
-		if !ok {
-			return
-		}
-
-		switch ins {
-		case "[":
-			if bf.DataCells[bf.DataPointer] == 0 {
-				bf.SKipToLoopEnd()
-			}
-		case "]":
-			if bf.DataCells[bf.DataPointer] != 0 {
-				bf.SkipBack()
-			}
-		case "+":
-			bf.DataCells[bf.DataPointer] += 1
-		case "-":
-			bf.DataCells[bf.DataPointer] -= 1
-		case "<":
-			bf.DataPointer -= 1
-		case ">":
-			bf.DataPointer += 1
-
-			// note the last toched data cell for to trim when displaying DataCells
-			if bf.DataPointer > bf.maxDataPointer {
-				bf.maxDataPointer = bf.DataPointer
-			}
-		case ".":
-			fmt.Printf("%s", string(bf.DataCells[bf.DataPointer]))
-		case ",":
-			fmt.Printf("> Input: ")
-			if c, err := bufio.NewReader(os.Stdin).ReadByte(); err != nil {
-				panic("can't read from stdin")
-			} else {
-				bf.DataCells[bf.DataPointer] = int(c)
-			}
-		default:
-		}
-	}
-}
-
-func readNextChar(r io.Reader) (bool, string) {
-	buf := make([]byte, 1)
-
-	c, err := r.Read(buf)
-
-	if err != nil && err != io.EOF {
-		return false, ""
-	}
-
-	if err == io.EOF || c == 0 {
-		return false, ""
-	}
-
-	return true, string(buf)
 }
 
 func main() {
