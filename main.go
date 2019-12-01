@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -38,80 +39,21 @@ func newBf(input io.Reader) Bf {
 
 // eiter read from Reader and add it to Input, or return data from Input
 func (bf *Bf) ReadInstruction() (bool, string) {
-	// fmt.Printf("> trying to read %d @ %v", bf.InstructionPointer, bf.Input)
-
-	// if bf.InstructionPointer == len(bf.Input) {
 	if bf.InstructionPointer < len(bf.Input) {
-		// fmt.Println("DEBUG: Read from cached input")
 		return true, bf.Input[bf.InstructionPointer]
-	} else {
-		// fmt.Println("DEBUG: Can't ead from cached input")
 	}
 
-	// fmt.Println("DEBUG: Trying to read from Reader")
-
 	if ok, c := readNextChar(bf.rawInput); ok {
-		// fmt.Println("> read input byte: ", c)
-
 		bf.Input = append(bf.Input, c)
-		// fmt.Println("> enhanced input, now: ", bf.Input)
 	} else {
-		// fmt.Println("> no more reading from input: ", c)
 		return false, ""
 	}
 
 	if bf.InstructionPointer < 0 || bf.InstructionPointer > len(bf.Input) {
-		panic("undefined behavior: can't point behind known chars")
+		panic("Instruction pointer advanced behind known data")
 	}
-
-	// fmt.Printf("> ReadInstruction: pos '%d': '%s', data: %d @ %d\n", bf.InstructionPointer, bf.Input[bf.InstructionPointer], bf.DataCells[bf.DataPointer], bf.DataPointer)
 
 	return true, bf.Input[bf.InstructionPointer]
-}
-
-func (bf *Bf) IncrementCurrentCell() {
-	if bf.DataCells[bf.DataPointer] >= 255 {
-		// fmt.Println("data cell value overflow:")
-		panic(bf)
-	}
-
-	bf.DataCells[bf.DataPointer] += 1
-
-	// fmt.Printf("Inc: %d @ %d\n", bf.DataCells[bf.DataPointer], bf.DataPointer)
-}
-
-func (bf *Bf) DecrementCurrentCell() {
-	if bf.DataCells[bf.DataPointer] < 0 {
-		// fmt.Println("Trying to decrement cell under zero!")
-		panic(bf)
-	}
-
-	bf.DataCells[bf.DataPointer] -= 1
-}
-
-func (bf *Bf) IncrementDataPointer() {
-	bf.DataPointer += 1
-
-	if bf.DataPointer > bf.maxDataPointer {
-		bf.maxDataPointer = bf.DataPointer
-	}
-}
-
-func (bf *Bf) DecrementDataPointer() {
-	if bf.DataPointer <= 0 {
-		// fmt.Println("Trying to decrement data pointer below zero!")
-		panic(bf)
-	}
-
-	bf.DataPointer -= 1
-}
-
-func (bf *Bf) AdvanceInstructionPointer() {
-	bf.InstructionPointer += 1
-}
-
-func (bf Bf) PrintCurrentCell() {
-	fmt.Printf("%s", string(bf.DataCells[bf.DataPointer]))
 }
 
 func (bf Bf) IntString() string {
@@ -124,14 +66,14 @@ func (bf Bf) IntString() string {
 	return res
 }
 
-func (bf *Bf) ReadIns() (bool, string) {
+func (bf *Bf) ReadAndMaybeAdvance() (bool, string) {
 	ok, ins := bf.ReadInstruction()
 
 	if !ok {
 		return ok, ins
 	}
 
-	bf.AdvanceInstructionPointer()
+	bf.InstructionPointer += 1
 
 	return ok, ins
 }
@@ -155,9 +97,9 @@ func (bf *Bf) SKipToLoopEnd() {
 }
 
 func (bf *Bf) SkipBack() {
-	bf.InstructionPointer -= 2
+	bf.InstructionPointer -= 2 // rewind to first instruction before "]"
 
-	for matchingBracket := 1; matchingBracket > 0; {
+	for matchingBracket := 1; matchingBracket > 0; bf.InstructionPointer-- {
 		ok, ins := bf.ReadInstruction()
 
 		if !ok {
@@ -175,14 +117,12 @@ func (bf *Bf) SkipBack() {
 		if matchingBracket == 0 {
 			return
 		}
-
-		bf.InstructionPointer -= 1
 	}
 }
 
 func (bf *Bf) Eval() {
 	for {
-		ok, ins := bf.ReadIns()
+		ok, ins := bf.ReadAndMaybeAdvance()
 
 		if !ok {
 			return
@@ -206,11 +146,19 @@ func (bf *Bf) Eval() {
 		case ">":
 			bf.DataPointer += 1
 
+			// note the last toched data cell for to trim when displaying DataCells
 			if bf.DataPointer > bf.maxDataPointer {
 				bf.maxDataPointer = bf.DataPointer
 			}
 		case ".":
-			bf.PrintCurrentCell()
+			fmt.Printf("%s", string(bf.DataCells[bf.DataPointer]))
+		case ",":
+			fmt.Printf("> Input: ")
+			if c, err := bufio.NewReader(os.Stdin).ReadByte(); err != nil {
+				panic("can't read from stdin")
+			} else {
+				bf.DataCells[bf.DataPointer] = int(c)
+			}
 		default:
 		}
 	}
