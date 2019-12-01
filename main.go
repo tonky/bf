@@ -119,109 +119,6 @@ func (bf Bf) PrintCurrentCell() {
 	fmt.Printf("%s", string(bf.DataCells[bf.DataPointer]))
 }
 
-func (bf *Bf) SkipLoop() {
-	bracketBalance := 0
-
-	for {
-		ok, ins := bf.ReadInstruction()
-
-		if !ok {
-			return
-		}
-
-		if ins == "[" {
-			bracketBalance += 1
-		}
-
-		if ins == "]" {
-			bracketBalance -= 1
-		}
-
-		bf.AdvanceInstructionPointer()
-
-		if bracketBalance == 0 {
-			return
-		}
-	}
-}
-
-func (bf *Bf) Run() {
-	for {
-		ok, ins := bf.ReadInstruction()
-
-		if !ok {
-			return
-		}
-
-		switch ins {
-		case "[":
-			bf.Loop()
-		case "]": // we're inside loop and it's the end of it
-			// fmt.Println("end of loop in inner, returning to parent")
-			// bf.AdvanceInstructionPointer()
-			return
-		case "+":
-			bf.IncrementCurrentCell()
-			bf.AdvanceInstructionPointer()
-		case "-":
-			bf.DecrementCurrentCell()
-			bf.AdvanceInstructionPointer()
-		case ">":
-			bf.IncrementDataPointer()
-			bf.AdvanceInstructionPointer()
-		case "<":
-			bf.DecrementDataPointer()
-			bf.AdvanceInstructionPointer()
-		case ".":
-			bf.PrintCurrentCell()
-			bf.AdvanceInstructionPointer()
-		default: // skip unknown commands
-			// fmt.Printf("> unknown instruction: '%s', skipping", ins)
-			bf.AdvanceInstructionPointer()
-		}
-	}
-}
-
-func (bf *Bf) Loop() {
-	startIdx := bf.InstructionPointer
-
-	// fmt.Println("> Starting 'Loop', startIdx: ", startIdx)
-
-	for {
-		ok, ins := bf.ReadInstruction()
-
-		if !ok {
-			return
-		}
-
-		if ins == "[" && bf.DataCells[bf.DataPointer] == 0 {
-			// fmt.Println("> skipping loop from beginning")
-			bf.SkipLoop()
-			// fmt.Println("> returning from SkipLoop() to parent Run()")
-			return
-		}
-
-		// fmt.Println(bf)
-
-		if ins == "]" && bf.DataCells[bf.DataPointer] == 0 {
-			// fmt.Println("> skipping loop end")
-			bf.AdvanceInstructionPointer()
-			return
-		}
-
-		if ins == "]" && bf.DataCells[bf.DataPointer] != 0 {
-			bf.InstructionPointer = startIdx
-			// fmt.Println("> ']' rewound loop to next position after: ", startIdx)
-		}
-
-		bf.AdvanceInstructionPointer()
-		// fmt.Println("> Evaluating inner data, doing 'bf.Run()' from bf.Loop()")
-		// fmt.Println(bf)
-		bf.Run()
-		// fmt.Printf("we're back in loop with starting index '%d'\n", startIdx)
-	}
-}
-
 func (bf Bf) IntString() string {
 	res := ""
 
@@ -232,14 +129,96 @@ func (bf Bf) IntString() string {
 	return res
 }
 
-func (bf Bf) Ascii() string {
-	res := ""
+func (bf *Bf) ReadIns() (bool, string) {
+	ok, ins := bf.ReadInstruction()
 
-	for _, v := range bf.DataCells[:bf.maxDataPointer+1] {
-		res += fmt.Sprint(string(v))
+	if !ok {
+		return ok, ins
 	}
 
-	return res
+	bf.AdvanceInstructionPointer()
+
+	return ok, ins
+}
+
+func (bf *Bf) SKipToLoopEnd() {
+	for matchingBracket := 1; matchingBracket > 0; bf.InstructionPointer++ {
+		ok, ins := bf.ReadInstruction()
+
+		if !ok {
+			return
+		}
+
+		if ins == "[" {
+			matchingBracket += 1
+		}
+
+		if ins == "]" {
+			matchingBracket -= 1
+		}
+	}
+}
+
+func (bf *Bf) SkipBack() {
+	bf.InstructionPointer -= 2
+
+	for matchingBracket := 1; matchingBracket > 0; {
+		ok, ins := bf.ReadInstruction()
+
+		if !ok {
+			return
+		}
+
+		if ins == "[" {
+			matchingBracket -= 1
+		}
+
+		if ins == "]" {
+			matchingBracket += 1
+		}
+
+		if matchingBracket == 0 {
+			return
+		}
+
+		bf.InstructionPointer -= 1
+	}
+}
+
+func (bf *Bf) Eval() {
+	for {
+		ok, ins := bf.ReadIns()
+
+		if !ok {
+			return
+		}
+
+		switch ins {
+		case "[":
+			if bf.DataCells[bf.DataPointer] == 0 {
+				bf.SKipToLoopEnd()
+			}
+		case "]":
+			if bf.DataCells[bf.DataPointer] != 0 {
+				bf.SkipBack()
+			}
+		case "+":
+			bf.DataCells[bf.DataPointer] += 1
+		case "-":
+			bf.DataCells[bf.DataPointer] -= 1
+		case "<":
+			bf.DataPointer -= 1
+		case ">":
+			bf.DataPointer += 1
+
+			if bf.DataPointer > bf.maxDataPointer {
+				bf.maxDataPointer = bf.DataPointer
+			}
+		case ".":
+			bf.PrintCurrentCell()
+		default:
+		}
+	}
 }
 
 func readNextChar(r io.Reader) (bool, string) {
@@ -259,6 +238,15 @@ func readNextChar(r io.Reader) (bool, string) {
 }
 
 func main() {
+	bfn := newBf(bytes.NewBufferString("++.+>[-.]"))
+	bfn2 := newBf(bytes.NewBufferString("[ empty [loop] inner ] >> ++"))
+
+	bfn.Eval()
+	bfn2.Eval()
+
+	fmt.Println("new eval: ", bfn.IntString())
+	fmt.Println("new eval2: ", bfn2.IntString())
+
 	args := os.Args[1:]
 
 	if len(args) != 1 {
@@ -281,7 +269,7 @@ func main() {
 		fmt.Println("Running program from file...")
 
 		bf := newBf(f)
-		bf.Run()
+		bf.Eval()
 
 		return
 	} else {
@@ -291,5 +279,6 @@ func main() {
 	fmt.Printf("Running program as a source string: '%s'\n", args[0])
 
 	bf := newBf(bytes.NewBufferString(args[0]))
-	bf.Run()
+
+	bf.Eval()
 }

@@ -9,7 +9,7 @@ import (
 func eval(s string) string {
 	bf := newBf(bytes.NewBufferString(s))
 
-	bf.Run()
+	bf.Eval()
 
 	return bf.IntString()
 }
@@ -42,7 +42,7 @@ func TestHelloWorld(t *testing.T) {
 
 	bf := newBf(f)
 
-	bf.Run()
+	bf.Eval()
 
 	got := bf.DataCells[:7]
 
