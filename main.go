@@ -24,11 +24,6 @@ type Bf struct {
 	maxDataPointer int
 }
 
-func (bf Bf) String() string {
-	return fmt.Sprintf("==============\nBF struct\nInput: %s\nInstructionPointer: %d\nDataCells: %v\nDataPointer: %d\n=============",
-		bf.Input, bf.InstructionPointer, bf.DataCells, bf.DataPointer)
-}
-
 func newBf(input io.Reader) Bf {
 	var dc [30]int
 
