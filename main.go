@@ -57,7 +57,7 @@ func (bf *Bf) Loop() {
 // Eval is the main interpreter - evaluate and recurse into any loop we find
 func (bf *Bf) Eval() {
 	for {
-		ok, instruction := bf.ReadAndAdvance()
+		instruction, ok := bf.ReadAndAdvance()
 
 		if !ok {
 			return
@@ -98,19 +98,19 @@ func (bf *Bf) Eval() {
 }
 
 // ReadAndAdvance reads current instruction and advances instruction pointer
-func (bf *Bf) ReadAndAdvance() (bool, string) {
-	ok, ins := bf.ReadInstruction()
+func (bf *Bf) ReadAndAdvance() (string, bool) {
+	ins, ok := bf.ReadInstruction()
 
 	bf.InstructionPointer += 1
 
-	return ok, ins
+	return ins, ok
 }
 
 // ReadInstruction tries to return an instruction at 'InstructionPointer' postion,
 // reading it from cahced Input if in bounds, or trying to read it from bufio.Reader
-func (bf *Bf) ReadInstruction() (bool, string) {
+func (bf *Bf) ReadInstruction() (string, bool) {
 	if bf.InstructionPointer < len(bf.Input) {
-		return true, bf.Input[bf.InstructionPointer]
+		return bf.Input[bf.InstructionPointer], true
 	}
 
 	if bf.InstructionPointer < 0 || bf.InstructionPointer > len(bf.Input) {
@@ -120,12 +120,12 @@ func (bf *Bf) ReadInstruction() (bool, string) {
 
 	// we don't have cached Input instruction,so let's try reading it from Reader
 	if c, err := bf.inputReader.ReadByte(); err != nil {
-		return false, ""
+		return "", false
 	} else {
 		bf.Input = append(bf.Input, string(c))
 	}
 
-	return true, bf.Input[bf.InstructionPointer]
+	return bf.Input[bf.InstructionPointer], true
 }
 
 // IntString pritns DataCells content as human readable string representation
@@ -142,7 +142,7 @@ func (bf Bf) IntString() string {
 // SkipToLoopEnd tries to advance to a matching "]" bracket in the input
 func (bf *Bf) SKipToLoopEnd() {
 	for matchingBracket := 1; matchingBracket > 0; bf.InstructionPointer++ {
-		ok, ins := bf.ReadInstruction()
+		ins, ok := bf.ReadInstruction()
 
 		if !ok {
 			return
